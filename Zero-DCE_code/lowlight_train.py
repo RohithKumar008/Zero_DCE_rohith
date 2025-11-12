@@ -26,7 +26,10 @@ def weights_init(m):
 
 def train(config):
     os.environ['CUDA_VISIBLE_DEVICES'] = '0'
-    DCE_net = model_denoise.enhance_net_denoise().cuda()
+    #this is for the filter model
+    # DCE_net = model_denoise.enhance_net_denoise().cuda()
+    #this is for the gpt model
+    DCE_net = model_denoise.enhance_net_refine().cuda()
     DCE_net.apply(weights_init)
     if config.load_pretrain:
         DCE_net.load_state_dict(torch.load(config.pretrain_dir))
