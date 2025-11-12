@@ -26,13 +26,29 @@ def populate_train_list(lowlight_images_path):
 
 	return train_list
 
+def populate_train_list_v2(lowlight_images_path):
+	"""Robust file collector: supports multiple extensions and returns absolute paths."""
+	lowlight_images_path = os.path.expanduser(lowlight_images_path)
+	if not lowlight_images_path.endswith(os.sep):
+		lowlight_images_path = lowlight_images_path + os.sep
+
+	patterns = ["*.png", "*.jpg", "*.jpeg", "*.bmp", "*.tif"]
+	image_list = []
+	for p in patterns:
+		image_list.extend(glob.glob(os.path.join(lowlight_images_path, p)))
+
+	# remove duplicates and make absolute
+	image_list = sorted(list({os.path.abspath(p) for p in image_list}))
+	random.shuffle(image_list)
+	return image_list
+
 	
 
 class lowlight_loader(data.Dataset):
 
 	def __init__(self, lowlight_images_path):
 
-		self.train_list = populate_train_list(lowlight_images_path) 
+		self.train_list = populate_train_list_v2(lowlight_images_path)
 		self.size = 256
 
 		self.data_list = self.train_list

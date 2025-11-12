@@ -22,10 +22,6 @@ def weights_init(m):
         m.weight.data.normal_(1.0, 0.02)
         m.bias.data.fill_(0)
 
-
-
-
-
 def train(config):
 
 	os.environ['CUDA_VISIBLE_DEVICES']='0'
