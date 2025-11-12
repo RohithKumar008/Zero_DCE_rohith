@@ -1,7 +1,43 @@
+
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import kornia
+
+class DenseFusion(nn.Module):
+    """
+    Small DenseNet-style fusion block that concatenates previous features
+    (dense/residual connections) between conv layers to improve gradient
+    flow and information reuse when predicting the per-pixel fusion mask.
+
+    Input: tensor with 6 channels (orig + denoised-enhanced)
+    Output: single-channel mask in [0,1]
+    """
+
+    def __init__(self, in_channels=6, growth_channels=32):
+        super(DenseFusion, self).__init__()
+        # first layer: input -> growth
+        self.conv1 = nn.Conv2d(in_channels, growth_channels, kernel_size=3, padding=1, bias=True)
+        # second layer: concat(input, out1) -> smaller
+        self.conv2 = nn.Conv2d(in_channels + growth_channels, max(growth_channels // 2, 4), kernel_size=3, padding=1, bias=True)
+        # third layer: concat(input, out1, out2) -> smaller
+        self.conv3 = nn.Conv2d(in_channels + growth_channels + max(growth_channels // 2, 4), max(growth_channels // 2, 4), kernel_size=3, padding=1, bias=True)
+        # final 1x1 to collapse concatenated features -> 1 channel
+        out_channels = in_channels + growth_channels + max(growth_channels // 2, 4) + max(growth_channels // 2, 4)
+        self.conv4 = nn.Conv2d(out_channels, 1, kernel_size=1, padding=0, bias=True)
+        self.relu = nn.ReLU(inplace=True)
+        self.sigmoid = nn.Sigmoid()
+
+    def forward(self, x):
+        # x: [B,6,H,W]
+        x0 = x
+        x1 = self.relu(self.conv1(x0))
+        x2 = self.relu(self.conv2(torch.cat([x0, x1], dim=1)))
+        x3 = self.relu(self.conv3(torch.cat([x0, x1, x2], dim=1)))
+        x4 = torch.cat([x0, x1, x2, x3], dim=1)
+        mask = self.sigmoid(self.conv4(x4))
+        return mask
 
 class enhance_net_denoise(nn.Module):
     """
@@ -36,14 +72,11 @@ class enhance_net_denoise(nn.Module):
 
         # fusion conv: takes concatenation of original and denoised-enhanced (6 channels)
         # and predicts a single-channel mask in [0,1]
-        self.fusion_net = nn.Sequential(
-            nn.Conv2d(6, number_f, kernel_size=3, padding=1, bias=True),
-            nn.ReLU(inplace=True),
-            nn.Conv2d(number_f, number_f // 2, kernel_size=3, padding=1, bias=True),
-            nn.ReLU(inplace=True),
-            nn.Conv2d(number_f // 2, 1, kernel_size=1, padding=0, bias=True),
-            nn.Sigmoid()
-        )
+        # Use a small Dense-like fusion block so intermediate features are
+        # concatenated (dense/residual-style) between conv layers. This helps
+        # preserve spatial detail and improves gradient flow when learning the
+        # fusion mask.
+        self.fusion_net = DenseFusion(in_channels=6, growth_channels=number_f)
 
         # denoising params
         self.median_kernel = median_kernel if median_kernel % 2 == 1 else median_kernel + 1
