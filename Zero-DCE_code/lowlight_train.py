@@ -122,6 +122,5 @@ if __name__ == "__main__":
     parser.add_argument('--pretrain_dir', type=str, default="snapshots/Epoch99.pth")
 
     config = parser.parse_args()
-
     os.makedirs(config.snapshots_folder, exist_ok=True)
     train(config)
